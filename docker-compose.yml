@@ -1,0 +1,78 @@
+version: "3.1"
+services:
+  mysql-movie-catalog:
+    image: martinicr/movie-catalog-db:v1.4
+    container_name: movie-catalog-db
+    mem_limit: 350m
+    ports:
+      - 3306:3306
+    environment:
+      # Use secret in real life
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ENV_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_ENV_DATABASE}
+      MOVIE_CATALOG_DB_USER: ${MYSQL_ENV_MOVIE_CATALOG_USER}
+      MOVIE_CATALOG_DB_PASSWORD: ${MYSQL_ENV_MOVIE_CATALOG_PASSWORD}
+      MOVIE_CATALOG_DB_LB_USER: ${MYSQL_ENV_MOVIE_CATALOG_LIQUIBASE_USER}
+      MOVIE_CATALOG_DB_LB_PASSWORD: ${MYSQL_ENV_MOVIE_CATALOG_LIQUIBASE_PASSWORD}
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-u${MYSQL_ENV_MOVIE_CATALOG_USER}", "-p${MYSQL_ENV_MOVIE_CATALOG_PASSWORD}", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  eureka:
+    image: martinicr/movie-app-eureka-server:0.0.1-SNAPSHOT
+    container_name: eureka-server
+    environment:
+      BPL_JVM_THREAD_COUNT: "50"
+#      JAVA_TOOL_OPTIONS: '-Dcom.sun.management.jmxremote
+#                  -Dcom.sun.management.jmxremote.local.only=false
+#                  -Dcom.sun.management.jmxremote.authenticate=false
+#                  -Dcom.sun.management.jmxremote.port=9010
+#                  -Dcom.sun.management.jmxremote.rmi.port=9010
+#                  -Djava.rmi.server.hostname=0.0.0.0
+#                  -Dcom.sun.management.jmxremote.ssl=false
+#                  -XX:+UseG1GC
+#                  -Xms256m
+#                  -Xmx256m'
+#    ports:
+#    - 8761:8761
+#    - 9010:9010
+#    restart: always
+
+#   We are not enabling this to mimic an environment in which the discovery server is not open
+#    ports:
+#      - 8761:8761
+
+  api-gateway:
+    image: martinicr/movie-app-api-gateway:0.0.1-SNAPSHOT
+    depends_on:
+      eureka:
+        condition: service_started
+    ports:
+    - 8080:8080
+    environment:
+      BPL_JVM_THREAD_COUNT: "50"
+
+  movie-catalog-api:
+    image: martinicr/movies-api:0.0.1-SNAPSHOT
+#    container_name property causes problems when trying to scale de amount of containers running because of name clashing
+#    container_name: movie-catalog-api
+#    mem_limit: 350m
+    depends_on:
+      mysql-movie-catalog:
+        condition: service_healthy
+#      eureka:
+#        condition: service_started
+#      api-gateway:
+#        condition: service_started
+#   We are not enabling this to mimic an environment in which this service is not open
+#    ports:
+#      - 8080:8080
+    environment:
+      BPL_JVM_THREAD_COUNT: "50"
+      spring.datasource.url: ${MOVIE_CATALOG_API_DB_JDBC}
+      spring.datasource.username: ${MYSQL_ENV_MOVIE_CATALOG_USER}
+      spring.datasource.password: ${MYSQL_ENV_MOVIE_CATALOG_PASSWORD}
+      spring.liquibase.user: ${MYSQL_ENV_MOVIE_CATALOG_LIQUIBASE_USER}
+      spring.liquibase.password: ${MYSQL_ENV_MOVIE_CATALOG_LIQUIBASE_PASSWORD}
